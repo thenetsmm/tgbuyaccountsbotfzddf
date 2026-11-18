@@ -42,3 +42,19 @@
      admin ရိုက်ထည့်ပေးရပါမယ် (email inbox ကို ဝင်ကြည့်နိုင်မှ
      ဖြစ်နိုင်ပါတယ်)။
    - Email ပြောင်းချင်မှ ပြောင်း၊ မပြောင်းချင်ရင် /skip ရိုက်ပို့လို့ရပါတယ်။
+
+10. "Login email ပြောင်းရန်" button ထပ်ထည့်ထားပါတယ်။
+    - ဒါက 2FA recovery email နဲ့ မတူပါ - login code ကို SMS အစား
+      email ကနေ လက်ခံတဲ့ Telegram setting ဖြစ်ပါတယ်။
+    - ⚠️ အရေးကြီးသတိပေးချက်: ဒီ feature ကို Telegram က account
+      အားလုံးမှာ မပေးသေးပါ (server-side rollout အပေါ်မူတည်ပြီး
+      account တချို့မှာ ဒီ option လုံးဝ မပါတတ်ပါ) - ဒါကြောင့်
+      button နှိပ်လိုက်ရင် error ပြန်လာတတ်ပါတယ်။ Error ပြရင်
+      "ဒီ account မှာ feature မပါဘူး" လို့ bot က ရှင်းပြပေးပါမယ်။
+      ဒီလိုပဲ ဖြစ်ချင်ဖြစ်မှာပါ၊ bot ရဲ့ ချို့ယွင်းချက် မဟုတ်ပါ။
+    - Email ထည့်ပြီးရင် Telegram ကနေ ပို့တဲ့ verification code ကို
+      admin ဆီကနေ ထပ်တောင်းပါမယ် (email inbox ထဲ ဝင်ကြည့်ထားဖို့ လိုပါတယ်)။
+    - /skip ရိုက်ပို့ရင် ကျော်လို့ရပါတယ်။
+    - ဒီ Telegram API feature က အသစ်ဖြစ်ပြီး server rollout မညီညွတ်တာမို့
+      error message အမျိုးမျိုး ပြန်လာနိုင်ပါတယ် - error ဘယ်လိုပေါ်လဲ
+      ပြောပြရင် ထပ်ပြင်ပေးနိုင်ပါတယ်။
