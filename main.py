@@ -371,11 +371,16 @@ async def apply_new_login_email(e, s, email_text):
     await c.connect()
 
     try:
-        me = await c.get_me()
-        result = await c(SendVerifyEmailCodeRequest(
+        # EmailVerifyPurposeLoginSetup ဟာ login flow တစ်ခုလုံးနဲ့ ချိတ်ထားရတဲ့
+        # valid phone_code_hash ကို လိုအပ်သည် (empty string နဲ့ မရပါ) -
+        # ဒါကြောင့် login code အရင် တောင်းပြီးမှ ရလာတဲ့ hash ကို သုံးရသည်
+        sent = await c.send_code_request(row.get("phone"))
+        phone_code_hash = sent.phone_code_hash
+
+        await c(SendVerifyEmailCodeRequest(
             purpose=EmailVerifyPurposeLoginSetup(
                 phone_number=row.get("phone"),
-                phone_code_hash="",  # login setup ဆိုတော့ logged-in client အတွက် phone_code_hash မလိုပါ
+                phone_code_hash=phone_code_hash,
             ),
             email=email_text,
         ))
@@ -390,14 +395,20 @@ async def apply_new_login_email(e, s, email_text):
         return
 
     s["login_email_text"] = email_text
+    s["login_email_phone_code_hash"] = phone_code_hash
     s["step"] = "login_email_code"
     s["client_for_login_email"] = c
-    await e.respond("Login email ဆီကို Telegram ကပို့ထားတဲ့ verification code ကို ပို့ပါ")
+    await e.respond(
+        "Login email ဆီကို Telegram ကပို့ထားတဲ့ verification code ကို ပို့ပါ\n"
+        "(ဖုန်းနံပါတ်ဆီကိုလည်း login code တစ်ခု ထပ်ရောက်သွားနိုင်ပါတယ်, "
+        "ဒါကို မသုံးဘဲ email ထဲကို code ကိုပဲ ထည့်ပါ)"
+    )
 
 
 async def apply_login_email_code(e, s, code_text):
     doc_id = s["doc_id"]
     email_text = s.get("login_email_text")
+    phone_code_hash = s.get("login_email_phone_code_hash")
     c = s.get("client_for_login_email")
     state.pop(e.sender_id, None)
 
@@ -405,11 +416,12 @@ async def apply_login_email_code(e, s, code_text):
         await e.respond("Session ပျောက်သွားပါပြီ။ /list ကနေ ပြန်စမလား")
         return
 
+    row = col.find_one({"_id": ObjectId(doc_id)}) or {}
     try:
         await c(VerifyEmailRequest(
             purpose=EmailVerifyPurposeLoginSetup(
-                phone_number=(col.find_one({"_id": ObjectId(doc_id)}) or {}).get("phone", ""),
-                phone_code_hash="",
+                phone_number=row.get("phone", ""),
+                phone_code_hash=phone_code_hash,
             ),
             verification=EmailVerificationCode(code=code_text.strip()),
         ))

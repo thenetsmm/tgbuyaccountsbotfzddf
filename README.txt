@@ -58,3 +58,10 @@
     - ဒီ Telegram API feature က အသစ်ဖြစ်ပြီး server rollout မညီညွတ်တာမို့
       error message အမျိုးမျိုး ပြန်လာနိုင်ပါတယ် - error ဘယ်လိုပေါ်လဲ
       ပြောပြရင် ထပ်ပြင်ပေးနိုင်ပါတယ်။
+
+11. [Fix] "Login email" error "The phone code is missing" ပြဿနာကို ပြင်ထားပါတယ်:
+    EmailVerifyPurposeLoginSetup ဟာ login code flow နဲ့ ချိတ်ထားရတဲ့ valid
+    phone_code_hash ကို လိုအပ်ကြောင်း တွေ့ရပါတယ်။ ဒါကြောင့် login email
+    ပြောင်းခင် bot က send_code_request ကို အရင်ခေါ်ပြီး hash ရယူပါတယ်
+    (ဒီအချိန်မှာ ဖုန်းနံပါတ်ဆီကိုလည်း login code တစ်ခု ရောက်သွားနိုင်ပါတယ်,
+    ဒါကို လျစ်လျူရှုပြီး bot တောင်းတဲ့ email ဆီက code ကိုပဲ ထည့်ပေးပါ)။
