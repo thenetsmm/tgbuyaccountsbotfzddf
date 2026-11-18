@@ -3,7 +3,11 @@ from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 from telethon.tl.functions.account import SendVerifyEmailCodeRequest, VerifyEmailRequest
-from telethon.tl.types import EmailVerifyPurposeLoginSetup, EmailVerificationCode
+from telethon.tl.types import (
+    EmailVerifyPurposeLoginSetup,
+    EmailVerifyPurposeLoginChange,
+    EmailVerificationCode,
+)
 from aiohttp import web
 from pymongo import MongoClient
 from bson import ObjectId
@@ -370,50 +374,56 @@ async def apply_new_login_email(e, s, email_text):
     c = TelegramClient(StringSession(row["session_string"]), API_ID, API_HASH)
     await c.connect()
 
+    purpose_used = "change"
+    phone_code_hash = None
     try:
-        # EmailVerifyPurposeLoginSetup ဟာ login flow တစ်ခုလုံးနဲ့ ချိတ်ထားရတဲ့
-        # valid phone_code_hash ကို လိုအပ်သည် (empty string နဲ့ မရပါ) -
-        # ဒါကြောင့် login code အရင် တောင်းပြီးမှ ရလာတဲ့ hash ကို သုံးရသည်
-        sent = await c.send_code_request(row.get("phone"))
-        phone_code_hash = sent.phone_code_hash
-
-        # send_code_request ပြီးတာနဲ့ connection ပြတ်တောက်တတ်တာကြောင့်
-        # request ထပ်ပို့ခင် connection ကို ပြန်စစ်/ပြန်ချိတ်သည်
-        if not c.is_connected():
-            await c.connect()
-
+        # Login email ရှိပြီးသားအကောင့်ကို "ပြောင်း"တာဆိုရင် EmailVerifyPurposeLoginChange
+        # ကိုသုံးရသည် - ဒါက phone_number/phone_code_hash လုံးဝ မလိုအပ်ပါ
+        # (Telegram core API docs: core.telegram.org/method/account.sendVerifyEmailCode)
         await c(SendVerifyEmailCodeRequest(
-            purpose=EmailVerifyPurposeLoginSetup(
-                phone_number=row.get("phone"),
-                phone_code_hash=phone_code_hash,
-            ),
+            purpose=EmailVerifyPurposeLoginChange(),
             email=email_text,
         ))
-    except Exception as ex:
-        await e.respond(
-            f"Login email ထည့်ရာမှာ error: {ex}\n\n"
-            f"ဒီ account မှာ \"Login email\" feature ဒီ Telegram server version "
-            f"ပေါ်မှာ မပါသေးတာ ဖြစ်နိုင်ပါတယ် (account အားလုံးမှာ ပါချင်မှ ပါတတ်သည်)။"
-        )
-        await c.disconnect()
-        state.pop(e.sender_id, None)
-        return
+    except Exception as ex1:
+        if "EMAIL_NOT_SETUP" in str(ex1):
+            # Login email လုံးဝ မရှိသေးတဲ့ account အတွက်ပဲ LoginSetup (phone hash လိုသည်)
+            try:
+                sent = await c.send_code_request(row.get("phone"))
+                phone_code_hash = sent.phone_code_hash
+                if not c.is_connected():
+                    await c.connect()
+                await c(SendVerifyEmailCodeRequest(
+                    purpose=EmailVerifyPurposeLoginSetup(
+                        phone_number=row.get("phone"),
+                        phone_code_hash=phone_code_hash,
+                    ),
+                    email=email_text,
+                ))
+                purpose_used = "setup"
+            except Exception as ex2:
+                await e.respond(f"Login email ထည့်ရာမှာ error: {ex2}")
+                await c.disconnect()
+                state.pop(e.sender_id, None)
+                return
+        else:
+            await e.respond(f"Login email ပြောင်းရာမှာ error: {ex1}")
+            await c.disconnect()
+            state.pop(e.sender_id, None)
+            return
 
     s["login_email_text"] = email_text
+    s["login_email_purpose"] = purpose_used
     s["login_email_phone_code_hash"] = phone_code_hash
     s["step"] = "login_email_code"
     s["client_for_login_email"] = c
-    await e.respond(
-        "Login email ဆီကို Telegram ကပို့ထားတဲ့ verification code ကို ပို့ပါ\n"
-        "(ဖုန်းနံပါတ်ဆီကိုလည်း login code တစ်ခု ထပ်ရောက်သွားနိုင်ပါတယ်, "
-        "ဒါကို မသုံးဘဲ email ထဲကို code ကိုပဲ ထည့်ပါ)"
-    )
+    await e.respond("Login email ဆီကို Telegram ကပို့ထားတဲ့ verification code ကို ပို့ပါ")
 
 
 async def apply_login_email_code(e, s, code_text):
     doc_id = s["doc_id"]
     email_text = s.get("login_email_text")
     phone_code_hash = s.get("login_email_phone_code_hash")
+    purpose_used = s.get("login_email_purpose", "change")
     c = s.get("client_for_login_email")
     state.pop(e.sender_id, None)
 
@@ -422,14 +432,19 @@ async def apply_login_email_code(e, s, code_text):
         return
 
     row = col.find_one({"_id": ObjectId(doc_id)}) or {}
+    if purpose_used == "setup":
+        purpose = EmailVerifyPurposeLoginSetup(
+            phone_number=row.get("phone", ""),
+            phone_code_hash=phone_code_hash,
+        )
+    else:
+        purpose = EmailVerifyPurposeLoginChange()
+
     try:
         if not c.is_connected():
             await c.connect()
         await c(VerifyEmailRequest(
-            purpose=EmailVerifyPurposeLoginSetup(
-                phone_number=row.get("phone", ""),
-                phone_code_hash=phone_code_hash,
-            ),
+            purpose=purpose,
             verification=EmailVerificationCode(code=code_text.strip()),
         ))
     except Exception as ex:

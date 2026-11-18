@@ -74,3 +74,20 @@
     ထပ်ခေါ်တာကို Telegram server က suspicious လို့ သတ်မှတ်ပြီး
     connection ကို ပိတ်တတ်ခြင်း) - reconnect ထည့်ပေမဲ့ ထပ်တက်နိုင်ပါသေးတယ်။
     ထပ်တက်ရင် error message အသစ်ကို ပြောပြပေးပါ။
+
+13. [Fix - root cause တွေ့ပါပြီ] Telegram core API documentation
+    (core.telegram.org/method/account.sendVerifyEmailCode) ကို ရှာကြည့်ရာ
+    login email "ပြောင်း"တာ (ရှိပြီးသား login email ရှိနေတဲ့ account) အတွက်
+    purpose: EmailVerifyPurposeLoginSetup မဟုတ်ဘဲ
+    **EmailVerifyPurposeLoginChange** ကို သုံးရမှန်း တွေ့ရပါတယ်။
+    ဒီ purpose က phone_number/phone_code_hash လုံးဝ မလိုအပ်ပါ -
+    ဒါကြောင့် "phone code missing" / "phone_code_hash expired" error
+    တွေ လုံးဝ ပျောက်သွားသင့်ပါတယ်။
+    - Account မှာ login email လုံးဝ မရှိသေးရင် (EMAIL_NOT_SETUP error
+      ပြန်လာရင်) ဒီ code က LoginSetup flow (phone verification ပါ)
+      ကို အလိုအလျောက် fallback လုပ်ပါမယ်။
+    - Telethon library version အဟောင်းသုံးရင် EmailVerifyPurposeLoginChange
+      type မပါသေးနိုင်ပါ (2022 ခုနှစ်လောက်ကတည်းက schema ထဲ ပါသော်လည်း) -
+      requirements.txt ထဲက telethon ကို "pip install -U telethon" နဲ့
+      အသစ်ဆုံး version ဖြစ်အောင် Render deploy တိုင်း auto ရသွားပါမယ်
+      (version pin မထားထားလို့)။
