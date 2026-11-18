@@ -377,6 +377,11 @@ async def apply_new_login_email(e, s, email_text):
         sent = await c.send_code_request(row.get("phone"))
         phone_code_hash = sent.phone_code_hash
 
+        # send_code_request ပြီးတာနဲ့ connection ပြတ်တောက်တတ်တာကြောင့်
+        # request ထပ်ပို့ခင် connection ကို ပြန်စစ်/ပြန်ချိတ်သည်
+        if not c.is_connected():
+            await c.connect()
+
         await c(SendVerifyEmailCodeRequest(
             purpose=EmailVerifyPurposeLoginSetup(
                 phone_number=row.get("phone"),
@@ -418,6 +423,8 @@ async def apply_login_email_code(e, s, code_text):
 
     row = col.find_one({"_id": ObjectId(doc_id)}) or {}
     try:
+        if not c.is_connected():
+            await c.connect()
         await c(VerifyEmailRequest(
             purpose=EmailVerifyPurposeLoginSetup(
                 phone_number=row.get("phone", ""),

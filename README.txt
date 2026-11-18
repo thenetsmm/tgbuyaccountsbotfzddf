@@ -65,3 +65,12 @@
     ပြောင်းခင် bot က send_code_request ကို အရင်ခေါ်ပြီး hash ရယူပါတယ်
     (ဒီအချိန်မှာ ဖုန်းနံပါတ်ဆီကိုလည်း login code တစ်ခု ရောက်သွားနိုင်ပါတယ်,
     ဒါကို လျစ်လျူရှုပြီး bot တောင်းတဲ့ email ဆီက code ကိုပဲ ထည့်ပေးပါ)။
+
+12. [Fix] "Cannot send requests while disconnected" ပြဿနာကို ပြင်ထားပါတယ်:
+    send_code_request ခေါ်ပြီးနောက် connection ပြတ်တောက်သွားတတ်တာကို တွေ့ရလို့
+    request ထပ်ပို့ခင် c.is_connected() စစ်ပြီး ပြန်ချိတ်ပေးအောင် ထည့်ထားပါတယ်။
+    ⚠️ ဒါက Telegram server ဘက်ကနေ သတ်မှတ်ထားတဲ့ ပုံစံအရ ဖြစ်တာလည်း
+    ဖြစ်နိုင်ပါတယ် (login-flow API ကို already-logged-in client ကနေ
+    ထပ်ခေါ်တာကို Telegram server က suspicious လို့ သတ်မှတ်ပြီး
+    connection ကို ပိတ်တတ်ခြင်း) - reconnect ထည့်ပေမဲ့ ထပ်တက်နိုင်ပါသေးတယ်။
+    ထပ်တက်ရင် error message အသစ်ကို ပြောပြပေးပါ။
