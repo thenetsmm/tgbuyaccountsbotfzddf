@@ -91,3 +91,55 @@
       requirements.txt ထဲက telethon ကို "pip install -U telethon" နဲ့
       အသစ်ဆုံး version ဖြစ်အောင် Render deploy တိုင်း auto ရသွားပါမယ်
       (version pin မထားထားလို့)။
+
+14. [Fix - final] Manus AI ရဲ့ Telegram official docs သုတေသနအရ -
+    EmailVerifyPurposeLoginChange ဟာ ရှိပြီးသား login email ပြောင်းဖို့
+    မှန်ကန်တဲ့ purpose ဖြစ်ကြောင်း အတည်ပြုရပါတယ် (parameter မလို)။
+    ဒါပေမဲ့ "EMAIL_NOT_SETUP" error ပြန်လာရင် LoginSetup ဘက်ကို
+    fallback **မလုပ်တော့ပါ** - authorized session ကနေ
+    phone_code_hash ကို fabricate ပြုလုပ်ပြီး ပြန်သုံးတာက login flow
+    အစစ်မဟုတ်လို့ Telegram server ဘက်က ပုံမှန်မဟုတ်တဲ့ request
+    အဖြစ် သတ်မှတ်နိုင်ပြီး account ကို flag/flood-wait ဖြစ်စေနိုင်ပါတယ်။
+    ဒါကြောင့် EMAIL_NOT_SETUP ပြန်လာရင် bot က ရှင်းရှင်းလင်းလင်း
+    ရှင်းပြပြီး ရပ်တန့်ပါမယ် - ဒီအခြေအနေမှာ login email ကို
+    Telegram app ထဲ ကိုယ်တိုင်ဝင်ပြီး Settings > Privacy and Security >
+    Login Email ကနေသာ ပြောင်းသင့်ပါတယ်။
+    "2FA password ပြောင်းရန်" နဲ့ "Recovery email ပြောင်းရန်" button
+    နှစ်ခုကတော့ stable Telethon API (edit_2fa) ကို သုံးထားလို့
+    ယုံကြည်စိတ်ချစွာ ဆက်အလုပ်လုပ်ပါတယ်။
+
+15. /list ကို pagination ထည့်ထားပါတယ် (page တစ်ခုမှာ account 10 ခု):
+    - "⬅ Back" / "Next ➡" button တွေနဲ့ page ချိတ်ကြည့်လို့ရပါတယ်
+    - Account တစ်ခုချင်းစီကို ကြည့်တဲ့အခါ "🗑 ဒီ account ကို ဖျက်ရန်"
+      button ရှိပါတယ် - နှိပ်ရင် "သေချာလား" confirm message
+      ထပ်ပြပါမယ် ("✅ ဖျက်မည်" / "❌ မဖျက်တော့ပါ")
+    - "✅ ဖျက်မည်" ကို နှိပ်မှသာ database ထဲက record ကို ဖျက်ပါမယ်
+      (ဒီဖျက်ခြင်းက database ထဲက record ကိုပဲ ဖျက်တာဖြစ်ပြီး
+      Telegram account ကိုယ်တိုင် (login ထွက်ခြင်း) ကို မထိခိုက်ပါ)
+    - ဖျက်ပြီးရင် list ကို အဲဒီ page ကနေပဲ ပြန်ပြပေးပါတယ်
+
+16. Account ကြည့်တဲ့ screen မှာ login code ဖတ်ပေးတဲ့ button ၂ ခု
+    ထပ်ထည့်ထားပါတယ် (Telegram ရဲ့ official service account 777000
+    ဆီကနေ ပို့တဲ့ login code message ကို တိုက်ရိုက် ဖတ်ပေးတာပါ -
+    အခြားဖုန်း/device တစ်ခုခုက ဒီ account ကို login ဝင်ဖို့
+    ကြိုးစားတဲ့အခါ ပို့ပေးတဲ့ code ကို ဆိုလိုတာပါ):
+
+    - "📩 5မိနစ်ထဲ login code ကြည့်ရန်" - 777000 ကနေ ရောက်ထားတဲ့
+      message တွေထဲက အသစ်ဆုံး code ကို ဖတ်ပြီး၊ ၅ မိနစ်အတွင်း
+      ရောက်ထားတာလား စစ်ပေးပါတယ်။ ၅ မိနစ်ကျော်နေပြီဆိုရင်
+      "fresh code မရှိပါ" လို့ ပြန်ပြောပါမယ်။
+    - "📨 နောက်ဆုံးရ login code" - အချိန်ကာလ မကန့်သတ်ဘဲ
+      777000 ကနေ လက်ရှိရှိနေသမျှ message ထဲက အသစ်ဆုံး code ကို
+      အချိန်တံဆိပ်နဲ့အတူ ပြပေးပါတယ်။
+
+    Code ကို regex (\d{5,7}) နဲ့ message ထဲက ဂဏန်းတွဲကို ရှာထုတ်
+    တာဖြစ်လို့ Telegram ရဲ့ login code format ပြောင်းသွားရင်
+    (ဥပမာ ဂဏန်းအရေအတွက် ပြောင်းသွားရင်) ထပ်ညှိပေးရနိုင်ပါတယ်။
+
+    ⚠️ ဒီ feature က account ပိုင်ရှင် သဘောတူညီချက်မရှိဘဲ
+    login code ကို admin က တိတ်တဆိတ် ဖတ်ယူဖို့ သုံးရင် Telegram
+    ရဲ့ Terms of Service ကို ချိုးဖောက်ရာရောက်ပြီး account
+    ပိုင်ရှင်ကို အန္တရာယ်ဖြစ်စေနိုင်ပါတယ် (တခြားနေရာကနေ
+    account ဝင်ယူခံရခြင်း)။ ကိုယ့်ပိုင် account၊ သို့မဟုတ်
+    ပိုင်ရှင်ရဲ့ ကြိုတင်သဘောတူညီချက် ရယူထားတဲ့ account
+    အတွက်သာ သုံးသင့်ပါတယ်။

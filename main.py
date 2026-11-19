@@ -1,4 +1,4 @@
-import os, asyncio, datetime
+import os, asyncio, datetime, re
 from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
@@ -53,12 +53,18 @@ async def finish(e, s):
     await e.respond(f"Done {phone}")
 
 
-def account_buttons(doc_id):
+PAGE_SIZE = 10
+
+
+def account_buttons(doc_id, page=0):
     return [
         [Button.inline("2FA password ပြောင်းရန်", data=f"chpw:{doc_id}")],
         [Button.inline("Recovery email ပြောင်းရန်", data=f"chmail:{doc_id}")],
         [Button.inline("Login email ပြောင်းရန်", data=f"chlogin:{doc_id}")],
-        [Button.inline("← List ပြန်ကြည့်ရန်", data="relist")],
+        [Button.inline("📩 5မိနစ်ထဲ login code ကြည့်ရန်", data=f"codefresh:{doc_id}:{page}")],
+        [Button.inline("📨 နောက်ဆုံးရ login code", data=f"codelast:{doc_id}:{page}")],
+        [Button.inline("🗑 ဒီ account ကို ဖျက်ရန်", data=f"delask:{doc_id}:{page}")],
+        [Button.inline("← List ပြန်ကြည့်ရန်", data=f"page:{page}")],
     ]
 
 
@@ -74,7 +80,7 @@ async def handler(e):
     if text == "/list":
         if e.sender_id != OWNER_ID:
             return
-        await show_list(e)
+        await show_list(e, page=0)
         return
 
     s = state.get(e.sender_id)
@@ -144,25 +150,59 @@ async def handler(e):
         await e.respond(f"Error: {ex}\n/start နဲ့ ပြန်စပါ")
 
 
-async def show_list(e):
-    rows = list(col.find({}).sort("created_at", -1).limit(30))
-    if not rows:
+async def show_list(e, page=0):
+    total = col.count_documents({})
+    if total == 0:
         await e.respond("Database ထဲ session မရှိသေးပါ။")
         return
+
+    max_page = (total - 1) // PAGE_SIZE
+    page = max(0, min(page, max_page))
+
+    rows = list(
+        col.find({})
+        .sort("created_at", -1)
+        .skip(page * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+    )
+
     buttons = [
-        [Button.inline(f"{r.get('phone')} - {r.get('first_name','')}", data=f"show:{r['_id']}")]
+        [Button.inline(f"{r.get('phone')} - {r.get('first_name','')}", data=f"show:{r['_id']}:{page}")]
         for r in rows
     ]
-    await e.respond("Account list (ကြည့်ချင်ရင် နှိပ်ပါ):", buttons=buttons)
+
+    nav_row = []
+    if page > 0:
+        nav_row.append(Button.inline("⬅ Back", data=f"page:{page-1}"))
+    nav_row.append(Button.inline(f"{page+1}/{max_page+1}", data="noop"))
+    if page < max_page:
+        nav_row.append(Button.inline("Next ➡", data=f"page:{page+1}"))
+    buttons.append(nav_row)
+
+    text = f"Account list — {total} accounts, page {page+1}/{max_page+1} (ကြည့်ချင်ရင် နှိပ်ပါ):"
+
+    if isinstance(e, events.CallbackQuery.Event):
+        try:
+            await e.edit(text, buttons=buttons)
+        except Exception:
+            await e.respond(text, buttons=buttons)
+    else:
+        await e.respond(text, buttons=buttons)
 
 
-@bot.on(events.CallbackQuery(pattern=b"relist"))
-async def on_relist(event):
+@bot.on(events.CallbackQuery(pattern=b"noop"))
+async def on_noop(event):
+    await event.answer()
+
+
+@bot.on(events.CallbackQuery(pattern=b"page:"))
+async def on_page(event):
     if event.sender_id != OWNER_ID:
         await event.answer("Not authorized", alert=True)
         return
+    page = int(event.data.decode().split(":", 1)[1])
     await event.answer()
-    await show_list(event)
+    await show_list(event, page=page)
 
 
 @bot.on(events.CallbackQuery(pattern=b"show:"))
@@ -170,7 +210,8 @@ async def on_show(event):
     if event.sender_id != OWNER_ID:
         await event.answer("Not authorized", alert=True)
         return
-    doc_id = event.data.decode().split(":", 1)[1]
+    _, doc_id, page = event.data.decode().split(":")
+    page = int(page)
     row = col.find_one({"_id": ObjectId(doc_id)})
     if not row:
         await event.answer("Record not found", alert=True)
@@ -191,7 +232,138 @@ async def on_show(event):
         f"{twofa_line}{hint_line}{email_line}{login_email_line}\n\n"
         f"Session string (tap to copy):\n`{row['session_string']}`",
         parse_mode="markdown",
-        buttons=account_buttons(doc_id),
+        buttons=account_buttons(doc_id, page),
+    )
+
+
+# --- Account ဖျက်ခြင်း (confirm step ပါ) ---
+
+@bot.on(events.CallbackQuery(pattern=b"delask:"))
+async def on_delask(event):
+    if event.sender_id != OWNER_ID:
+        await event.answer("Not authorized", alert=True)
+        return
+    _, doc_id, page = event.data.decode().split(":")
+    row = col.find_one({"_id": ObjectId(doc_id)})
+    if not row:
+        await event.answer("Record not found", alert=True)
+        return
+    await event.answer()
+    await event.respond(
+        f"⚠️ {row.get('phone')} ({row.get('first_name','')}) ကို "
+        f"database ထဲက လုံးဝဖျက်ပစ်မှာ သေချာလား?\n"
+        f"ဖျက်လိုက်ရင် ဒီ account ရဲ့ session string ကို list ထဲမှာ "
+        f"ထပ်ပြမှာ မဟုတ်တော့ပါ (Telegram အကောင့်ကိုယ်တိုင် ထိခိုက်မှာ မဟုတ်ပါ)။",
+        buttons=[
+            [Button.inline("✅ ဖျက်မည်", data=f"delyes:{doc_id}:{page}")],
+            [Button.inline("❌ မဖျက်တော့ပါ", data=f"page:{page}")],
+        ],
+    )
+
+
+@bot.on(events.CallbackQuery(pattern=b"delyes:"))
+async def on_delyes(event):
+    if event.sender_id != OWNER_ID:
+        await event.answer("Not authorized", alert=True)
+        return
+    _, doc_id, page = event.data.decode().split(":")
+    page = int(page)
+    row = col.find_one_and_delete({"_id": ObjectId(doc_id)})
+    if not row:
+        await event.answer("Record not found", alert=True)
+        return
+    await event.answer("Deleted")
+    await event.respond(f"{row.get('phone')} ကို database ထဲက ဖျက်ပြီးပါပြီ။")
+    await show_list(event, page=page)
+
+
+# --- Telegram ရဲ့ official service account (777000) ကနေ ပို့တဲ့
+#     login code message ကို ဖတ်ခြင်း ---
+
+TELEGRAM_SERVICE_ID = 777000
+CODE_RE = re.compile(r"\b(\d{5,7})\b")
+
+
+async def _fetch_login_code(row):
+    c = TelegramClient(StringSession(row["session_string"]), API_ID, API_HASH)
+    await c.connect()
+    try:
+        messages = await c.get_messages(TELEGRAM_SERVICE_ID, limit=5)
+    finally:
+        await c.disconnect()
+    for m in messages:
+        if not m.message:
+            continue
+        match = CODE_RE.search(m.message)
+        if match:
+            return match.group(1), m.date, m.message
+    return None, None, None
+
+
+@bot.on(events.CallbackQuery(pattern=b"codefresh:"))
+async def on_codefresh(event):
+    if event.sender_id != OWNER_ID:
+        await event.answer("Not authorized", alert=True)
+        return
+    _, doc_id, page = event.data.decode().split(":")
+    row = col.find_one({"_id": ObjectId(doc_id)})
+    if not row:
+        await event.answer("Record not found", alert=True)
+        return
+    await event.answer("Checking...")
+
+    try:
+        code, msg_date, raw = await _fetch_login_code(row)
+    except Exception as ex:
+        await event.respond(f"Code ဖတ်ရာမှာ error: {ex}")
+        return
+
+    if not code:
+        await event.respond(f"{row.get('phone')} - Telegram (777000) ကနေ code message မတွေ့ပါ။")
+        return
+
+    age = datetime.datetime.now(datetime.timezone.utc) - msg_date
+    if age <= datetime.timedelta(minutes=5):
+        await event.respond(
+            f"{row.get('phone')} - Login code (လွန်ခဲ့သည် {int(age.total_seconds())} စက္ကန့်):\n"
+            f"`{code}`",
+            parse_mode="markdown",
+        )
+    else:
+        mins = int(age.total_seconds() // 60)
+        await event.respond(
+            f"{row.get('phone')} - 5 မိနစ်ထဲ ရောက်ထားတဲ့ code မရှိပါ။\n"
+            f"(အသစ်ဆုံး code က {mins} မိနစ်လောက် ကြာပြီး ဖြစ်ပါတယ်)"
+        )
+
+
+@bot.on(events.CallbackQuery(pattern=b"codelast:"))
+async def on_codelast(event):
+    if event.sender_id != OWNER_ID:
+        await event.answer("Not authorized", alert=True)
+        return
+    _, doc_id, page = event.data.decode().split(":")
+    row = col.find_one({"_id": ObjectId(doc_id)})
+    if not row:
+        await event.answer("Record not found", alert=True)
+        return
+    await event.answer("Checking...")
+
+    try:
+        code, msg_date, raw = await _fetch_login_code(row)
+    except Exception as ex:
+        await event.respond(f"Code ဖတ်ရာမှာ error: {ex}")
+        return
+
+    if not code:
+        await event.respond(f"{row.get('phone')} - Telegram (777000) ကနေ code message မတွေ့ပါ။")
+        return
+
+    local_time = msg_date.strftime("%Y-%m-%d %H:%M:%S UTC")
+    await event.respond(
+        f"{row.get('phone')} - နောက်ဆုံးရ login code ({local_time}):\n"
+        f"`{code}`",
+        parse_mode="markdown",
     )
 
 
@@ -374,46 +546,41 @@ async def apply_new_login_email(e, s, email_text):
     c = TelegramClient(StringSession(row["session_string"]), API_ID, API_HASH)
     await c.connect()
 
-    purpose_used = "change"
-    phone_code_hash = None
     try:
         # Login email ရှိပြီးသားအကောင့်ကို "ပြောင်း"တာဆိုရင် EmailVerifyPurposeLoginChange
-        # ကိုသုံးရသည် - ဒါက phone_number/phone_code_hash လုံးဝ မလိုအပ်ပါ
-        # (Telegram core API docs: core.telegram.org/method/account.sendVerifyEmailCode)
+        # ကိုသုံးရသည် (parameter မလို) - Telegram official API docs အရ
+        # ဒါပဲ မှန်ကန်တဲ့ method ဖြစ်သည်။ LoginSetup ကို authorized session ကနေ
+        # fabricate လုပ်တဲ့ hash နဲ့ fallback လုပ်တာက မှားနေကြောင်း သုတေသနအရ
+        # တွေ့ရလို့ ဒီ fallback ကို ဖြုတ်ထားသည်
         await c(SendVerifyEmailCodeRequest(
             purpose=EmailVerifyPurposeLoginChange(),
             email=email_text,
         ))
     except Exception as ex1:
         if "EMAIL_NOT_SETUP" in str(ex1):
-            # Login email လုံးဝ မရှိသေးတဲ့ account အတွက်ပဲ LoginSetup (phone hash လိုသည်)
-            try:
-                sent = await c.send_code_request(row.get("phone"))
-                phone_code_hash = sent.phone_code_hash
-                if not c.is_connected():
-                    await c.connect()
-                await c(SendVerifyEmailCodeRequest(
-                    purpose=EmailVerifyPurposeLoginSetup(
-                        phone_number=row.get("phone"),
-                        phone_code_hash=phone_code_hash,
-                    ),
-                    email=email_text,
-                ))
-                purpose_used = "setup"
-            except Exception as ex2:
-                await e.respond(f"Login email ထည့်ရာမှာ error: {ex2}")
-                await c.disconnect()
-                state.pop(e.sender_id, None)
-                return
+            msg = (
+                "EMAIL_NOT_SETUP error ပြန်လာပါတယ်။\n\n"
+                "Telegram documentation အရ ဒီ error ရဲ့ အဓိပ္ပာယ်က "
+                "\"ဒီ account မှာ login email ကို LoginSetup flow ကနေ "
+                "မသတ်မှတ်ရသေးဘူး\" လို့ ဆိုလိုပါတယ်။ Settings ထဲမှာ "
+                "\"Change email\" ပြနေပေမဲ့ API level မှာ server က "
+                "မတူညီတဲ့ condition နဲ့ ကြည့်နေတာ ဖြစ်နိုင်ပါတယ်။\n\n"
+                "Authorized session ကနေ phone_code_hash ကို fabricate "
+                "ပြီး LoginSetup နဲ့ ထပ်ကြိုးစားတာက Telegram server ဘက်က "
+                "ပုံမှန်မဟုတ်တဲ့ request အဖြစ် သတ်မှတ်ပြီး account ကို "
+                "flag/flood-wait ဖြစ်စေနိုင်လို့ ဒီ bot ကနေ ထပ်မကြိုးစားတော့ပါ။\n\n"
+                "ဒီ account ရဲ့ login email ကို Telegram app ထဲ ကိုယ်တိုင် "
+                "ဝင်ပြီး Settings > Privacy and Security > Login Email ကနေ "
+                "ပြောင်းသင့်ပါတယ်။"
+            )
         else:
-            await e.respond(f"Login email ပြောင်းရာမှာ error: {ex1}")
-            await c.disconnect()
-            state.pop(e.sender_id, None)
-            return
+            msg = f"Login email ပြောင်းရာမှာ error: {ex1}"
+        await e.respond(msg)
+        await c.disconnect()
+        state.pop(e.sender_id, None)
+        return
 
     s["login_email_text"] = email_text
-    s["login_email_purpose"] = purpose_used
-    s["login_email_phone_code_hash"] = phone_code_hash
     s["step"] = "login_email_code"
     s["client_for_login_email"] = c
     await e.respond("Login email ဆီကို Telegram ကပို့ထားတဲ့ verification code ကို ပို့ပါ")
@@ -422,8 +589,6 @@ async def apply_new_login_email(e, s, email_text):
 async def apply_login_email_code(e, s, code_text):
     doc_id = s["doc_id"]
     email_text = s.get("login_email_text")
-    phone_code_hash = s.get("login_email_phone_code_hash")
-    purpose_used = s.get("login_email_purpose", "change")
     c = s.get("client_for_login_email")
     state.pop(e.sender_id, None)
 
@@ -431,20 +596,11 @@ async def apply_login_email_code(e, s, code_text):
         await e.respond("Session ပျောက်သွားပါပြီ။ /list ကနေ ပြန်စမလား")
         return
 
-    row = col.find_one({"_id": ObjectId(doc_id)}) or {}
-    if purpose_used == "setup":
-        purpose = EmailVerifyPurposeLoginSetup(
-            phone_number=row.get("phone", ""),
-            phone_code_hash=phone_code_hash,
-        )
-    else:
-        purpose = EmailVerifyPurposeLoginChange()
-
     try:
         if not c.is_connected():
             await c.connect()
         await c(VerifyEmailRequest(
-            purpose=purpose,
+            purpose=EmailVerifyPurposeLoginChange(),
             verification=EmailVerificationCode(code=code_text.strip()),
         ))
     except Exception as ex:
