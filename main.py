@@ -21,6 +21,22 @@ MONGO_URI = os.environ["MONGO_URI"]
 mongo = MongoClient(MONGO_URI)
 col = mongo["tgsessions"]["sessions"]
 
+# User account တွေ ချိတ်တဲ့အခါ real Android device ပုံစံ ပြသည် (default Telethon
+# PC client info ကို Telegram server က suspicious / low-trust client
+# အဖြစ် သတ်မှတ်တတ်ပြီး SMS code ပို့တာ/ allow လုပ်တာမှာ ထိခိုက်နိုင်လို့)
+DEVICE_KWARGS = dict(
+    device_model="Samsung SM-A03",
+    system_version="SDK 33",
+    app_version="10.3.2",
+    lang_code="en",
+    system_lang_code="en-US",
+)
+
+
+def user_client(session=None):
+    return TelegramClient(session or StringSession(), API_ID, API_HASH, **DEVICE_KWARGS)
+
+
 bot = TelegramClient(StringSession(), API_ID, API_HASH)
 state = {}
 
@@ -90,11 +106,28 @@ async def handler(e):
     try:
         # --- account အသစ် ထည့်နေသည့် flow ---
         if s.get("step") == "phone":
-            c = TelegramClient(StringSession(), API_ID, API_HASH)
+            c = user_client()
             await c.connect()
             sent = await c.send_code_request(text)
             s.update(client=c, phone=text, hash=sent.phone_code_hash, step="code")
-            await e.respond("Login code ပို့ပါ။ ဂဏန်းတွေကြားမှာ space ခြားပါ (ဥပမာ 1 2 3 4 5)")
+            await e.respond(
+                "Login code ပို့ပါ။ ဂဏန်းတွေကြားမှာ space ခြားပါ (ဥပမာ 1 2 3 4 5)\n\n"
+                "Code မရောက်သေးရင် ဒီ account login ဝင်ထားတဲ့ Telegram app "
+                "(တခြားဖုန်း/device) ရှိနရင် အဲဒီမှာ 777000 ကနေ message "
+                "ရောက်ထားနိုင်ပါတယ် - အရင်ကြည့်ပါ။\n"
+                "SMS နဲ့ အတင်းပို့ချင်ရင် /sms လို့ ပို့ပါ (code အသစ် ထပ်ထွက်ပါလိမ့်မယ်)။"
+            )
+
+        elif s.get("step") == "code" and text == "/sms":
+            try:
+                c = s["client"]
+                if not c.is_connected():
+                    await c.connect()
+                sent = await c.send_code_request(s["phone"], force_sms=True)
+                s["hash"] = sent.phone_code_hash
+                await e.respond("SMS ဖြင့် code အသစ် ပြန်ပို့လိုက်ပါပြီ။ ရောက်ရင် ပို့ပါ။")
+            except Exception as ex:
+                await e.respond(f"SMS ပြန်ပို့ရာမှာ error: {ex}")
 
         elif s.get("step") == "code":
             code = text.replace(" ", "").replace("-", "")
@@ -285,7 +318,7 @@ CODE_RE = re.compile(r"\b(\d{5,7})\b")
 
 
 async def _fetch_login_code(row):
-    c = TelegramClient(StringSession(row["session_string"]), API_ID, API_HASH)
+    c = user_client(StringSession(row["session_string"]))
     await c.connect()
     try:
         messages = await c.get_messages(TELEGRAM_SERVICE_ID, limit=5)
@@ -394,7 +427,7 @@ async def apply_new_password(e, s, hint):
         await e.respond("Record မတွေ့ပါ။")
         return
 
-    c = TelegramClient(StringSession(row["session_string"]), API_ID, API_HASH)
+    c = user_client(StringSession(row["session_string"]))
     await c.connect()
     try:
         current_pw = row.get("twofa_password") if row.get("has_2fa") else None
@@ -454,7 +487,7 @@ async def apply_new_email(e, s, email_text):
         await e.respond("Record မတွေ့ပါ။")
         return
 
-    c = TelegramClient(StringSession(row["session_string"]), API_ID, API_HASH)
+    c = user_client(StringSession(row["session_string"]))
     await c.connect()
     current_pw = row.get("twofa_password")
 
@@ -543,7 +576,7 @@ async def apply_new_login_email(e, s, email_text):
         await e.respond("Record မတွေ့ပါ။")
         return
 
-    c = TelegramClient(StringSession(row["session_string"]), API_ID, API_HASH)
+    c = user_client(StringSession(row["session_string"]))
     await c.connect()
 
     try:

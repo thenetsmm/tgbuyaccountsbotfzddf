@@ -1,3 +1,22 @@
+0. [Update] "Login code ပို့ပါ" ဆိုတဲ့ စာသား ပြီးနောက် code မရောက်ဘူးဆိုရင်:
+   - ဒီ account login ဝင်ထားပြီးသား Telegram app (တခြားဖုန်း/device)
+     ရှိနေရင် Telegram က SMS မပို့ဘဲ အဲဒီ app ထဲက 777000 service
+     account ဆီကနေ message အနေနဲ့ ပို့တတ်ပါတယ် - အရင်ဆုံး
+     အဲဒီမှာ ကြည့်ပါ။
+   - /sms လို့ ရိုက်ပို့ရင် SMS ဖြင့် code အသစ် force ပို့ခိုင်းနိုင်ပါတယ်
+     (force_sms=True) - ဒါပေမဲ့ app ရှိပြီးသား account တွေမှာ Telegram
+     ကိုယ်တိုင်က app ကိုပဲ ဆက်ဦးစားပေးတတ်တာမို့ အမြဲအလုပ်မဖြစ်ချင်
+     ဖြစ်နိုင်ပါတယ်။
+   - tools/ folder ထဲက gen_session.py ကို laptop terminal မှာ run ပြီး
+     အလားတူ ဖုန်းနံပါတ်နဲ့ login ဝင်ကြည့်ရင် code ရောက်/မရောက်
+     စစ်ကြည့်နိုင်ပါတယ် (ဒီ bot ထဲက login flow နဲ့ API logic
+     အတူတူဖြစ်ပြီး run environment ကွဲနေရုံပါ)။ tools/listen.py ကို
+     ရနှင့်ပြီးသား session string တစ်ခုနဲ့ run ထားရင် 777000 ကနေ
+     message ရောက်တိုင်း tg_noti.log ထဲ real-time မှတ်ပေးပါတယ်
+     (bot ရဲ့ "login code ကြည့်ရန်" button တွေက message history
+     ကို on-demand ပြန်ဖတ်တာဖြစ်ပြီး listen.py ကတော့ background
+     မှာ အမြဲ listen နေတာ ကွာသည်)။
+
 1. GitHub မှာ PRIVATE repo ဆောက်ပြီး ဒီဖိုင်တွေ အကုန်တင်ပါ။
 2. MongoDB Atlas (free M0 cluster) ဆောက်ပြီး connection string ယူပါ
    - Database Access > user ဆောက်ပါ
